@@ -10,15 +10,40 @@
 
 constexpr int bailoutRadius = 100;
 constexpr int max_iterations = 1000;
+using precision = double;
 
 constexpr int previewTextureSizeFactor = 10;
 constexpr float baseForZoomScrollFunction = 0.5;
 constexpr int howManyPixelsToComputePerAsyncMandelbrotResume = (1000 * 1000) / 100;
+constexpr std::chrono::milliseconds frame_duration(17);
+
+enum
+{
+    is_in_mandelbrot_set = -10,
+};
+void colorThisPartBasedOnIterationCount(unsigned char RGBarray[], float iterations_number_took)
+{
+    if (iterations_number_took == is_in_mandelbrot_set)
+    {
+        RGBarray[0] = 0; // R
+        RGBarray[1] = 0; // G
+        RGBarray[2] = 0; // B
+    }
+    else
+    {
+        float hue = iterations_number_took * 5 + 240;
+        HSV hsvColor{(float)fmod(hue, 360.0f), 1, 1};
+        RGB rgbColor = HSVtoRGB(hsvColor);
+        RGBarray[0] = rgbColor.r; // R
+        RGBarray[1] = rgbColor.g; // G
+        RGBarray[2] = rgbColor.b; // B
+    }
+}
 
 struct complex
 {
-    float r;
-    float i;
+    precision r;
+    precision i;
 };
 
 void printComplex(complex c)
@@ -37,13 +62,9 @@ namespace state
     std::vector<unsigned char> textureImage;
 
     complex centralPoint{-0.5, 0};
-    float zoom = 3;
+    precision zoom = 3;
 }
 
-enum
-{
-    is_in_mandelbrot_set = -10,
-};
 inline float smooth_iteration_count(complex &c)
 {
     complex z{0, 0};
@@ -51,14 +72,14 @@ inline float smooth_iteration_count(complex &c)
     for (int i = 0; i < max_iterations; i++)
     {
         // z = z^2 + c
-        float tempZI = 2 * z.r * z.i + c.i;
+        precision tempZI = 2 * z.r * z.i + c.i;
         z.r = z.r * z.r - z.i * z.i + c.r;
         z.i = tempZI;
 
-        float absoluteCsquared = z.r * z.r + z.i * z.i;
+        precision absoluteCsquared = z.r * z.r + z.i * z.i;
         if (absoluteCsquared > bailoutRadius * bailoutRadius)
         {
-            float smoother = 2.0 - log2(log(absoluteCsquared));
+            precision smoother = 2.0 - log2(log(absoluteCsquared));
             return i + smoother;
         }
     }
@@ -68,24 +89,6 @@ inline float smooth_iteration_count(complex &c)
 inline float smooth_iteration_count(complex &&c)
 {
     return smooth_iteration_count(c);
-}
-
-void colorThisPartBasedOnIterationCount(unsigned char RGBarray[], float iterations_number_took)
-{
-    if (iterations_number_took == is_in_mandelbrot_set)
-    {
-        RGBarray[0] = 0; // R
-        RGBarray[1] = 0; // G
-        RGBarray[2] = 0; // B
-    }
-    else
-    {
-        HSV hsvColor{(float)fmod(iterations_number_took * 10 + 240, 360), 1, 1};
-        RGB rgbColor = HSVtoRGB(hsvColor);
-        RGBarray[0] = rgbColor.r; // R
-        RGBarray[1] = rgbColor.g; // G
-        RGBarray[2] = rgbColor.b; // B
-    }
 }
 
 void newTextureSize(std::vector<unsigned char> &newTextureData, int width, int height, GLuint shaderProgram)
@@ -127,7 +130,7 @@ complex getComplexNumberCursorPointsToInWindow(GLFWwindow *window)
     double cursorX, cursorY;
     getNormalizedCursorPositionInWindow(window, cursorX, cursorY);
 
-    float highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
+    precision highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
 
     complex n;
     n.r = centralPoint.r + (cursorX - 0.5) * (currentWidth / highestOfThem) * zoom;
@@ -142,34 +145,34 @@ void getNormalizedPositionCursorIsInZoomSpace(double &normalizedX, double &norma
     double cursorX, cursorY;
     getNormalizedCursorPositionInWindow(window, cursorX, cursorY);
 
-    float highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
+    precision highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
 
     normalizedX = (cursorX - 0.5) * (currentWidth / highestOfThem) + 0.5;
     normalizedY = (cursorY - 0.5) * (currentHeight / highestOfThem) + 0.5;
 }
 
-complex numberCentralShouldBeToMakePointBeInNormalizedZoomSpace(complex point, float zoom, float Nwidth, float Nheight)
+complex numberCentralShouldBeToMakePointBeInNormalizedZoomSpace(complex point, precision zoom, precision Nwidth, precision Nheight)
 {
     return complex{-zoom * Nwidth + point.r + zoom / 2, -zoom * Nheight + point.i + zoom / 2};
 }
 
-complex numberCentralShouldBeToMakePointBeInNormalizedWindow(complex point, float zoom, float Nwidth, float Nheight)
+complex numberCentralShouldBeToMakePointBeInNormalizedWindow(complex point, precision zoom, precision Nwidth, precision Nheight)
 {
     using namespace state;
-    float highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
+    precision highestOfThem = (currentHeight > currentWidth) ? currentHeight : currentWidth;
     complex n;
-    n.r = -(float(Nwidth) - 0.5f) * (float(currentWidth) / highestOfThem) * zoom + point.r;
-    n.i = -(float(Nheight) - 0.5f) * (float(currentHeight) / highestOfThem) * zoom + point.i;
+    n.r = -(precision(Nwidth) - 0.5f) * (precision(currentWidth) / highestOfThem) * zoom + point.r;
+    n.i = -(precision(Nheight) - 0.5f) * (precision(currentHeight) / highestOfThem) * zoom + point.i;
     return n;
 }
 
 namespace mandelbrotCalculator
 {
-    void computeMandelbrot(std::vector<unsigned char> &textureData, float zoom, complex centralPoint, int width, int height)
+    void computeMandelbrot(std::vector<unsigned char> &textureData, precision zoom, complex centralPoint, int width, int height)
     {
         textureData.resize(width * height * 3); // RGB format: 3 bytes per pixel
 
-        float highestOfThem = (height > width) ? height : width;
+        precision highestOfThem = (height > width) ? height : width;
 
         for (int y = 0; y < height; ++y)
         {
@@ -178,8 +181,8 @@ namespace mandelbrotCalculator
                 int index = (y * width + x) * 3;
 
                 complex c;
-                c.r = (float(x) / float(width)) * zoom * (float(width) / highestOfThem) - zoom * (float(width) / highestOfThem) / 2 + centralPoint.r;
-                c.i = (float(y) / float(height)) * zoom * (float(height) / highestOfThem) - zoom * (float(height) / highestOfThem) / 2 + centralPoint.i;
+                c.r = (precision(x) / precision(width)) * zoom * (precision(width) / highestOfThem) - zoom * (precision(width) / highestOfThem) / 2 + centralPoint.r;
+                c.i = (precision(y) / precision(height)) * zoom * (precision(height) / highestOfThem) - zoom * (precision(height) / highestOfThem) / 2 + centralPoint.i;
 
                 float iterations_number_took = smooth_iteration_count(c);
 
@@ -194,9 +197,9 @@ namespace mandelbrotCalculator::asyncMandelbrot
 {
     namespace asyncMandelbrotState
     {
-        float highestOfThem;
+        precision highestOfThem;
         std::vector<unsigned char> textureData;
-        float zoom;
+        precision zoom;
         complex centralPoint;
         int width;
         int height;
@@ -236,7 +239,7 @@ namespace mandelbrotCalculator::asyncMandelbrot
         return textureData;
     }
 
-    void compute(float zoom_, complex centralPoint_, int width_, int height_)
+    void compute(precision zoom_, complex centralPoint_, int width_, int height_)
     {
         using namespace asyncMandelbrotState;
         isTextureReadyForUsage = false;
@@ -282,8 +285,8 @@ namespace mandelbrotCalculator::asyncMandelbrot
                 int index = (y * width + x) * 3;
 
                 complex c;
-                c.r = (float(x) / float(width)) * zoom * (float(width) / highestOfThem) - zoom * (float(width) / highestOfThem) / 2 + centralPoint.r;
-                c.i = (float(y) / float(height)) * zoom * (float(height) / highestOfThem) - zoom * (float(height) / highestOfThem) / 2 + centralPoint.i;
+                c.r = (precision(x) / precision(width)) * zoom * (precision(width) / highestOfThem) - zoom * (precision(width) / highestOfThem) / 2 + centralPoint.r;
+                c.i = (precision(y) / precision(height)) * zoom * (precision(height) / highestOfThem) - zoom * (precision(height) / highestOfThem) / 2 + centralPoint.i;
 
                 float iterations_number_took = smooth_iteration_count(c);
 
@@ -369,11 +372,11 @@ namespace mandelbrotCalculator::parallelMandelbrot
         setReadyThread(true);
     }
 
-    void computePiece(std::vector<unsigned char> &textureData, float zoom, complex centralPoint, int width, int height, int begin, unsigned int howManyPixels, int myThreadID)
+    void computePiece(std::vector<unsigned char> &textureData, precision zoom, complex centralPoint, int width, int height, int begin, unsigned int howManyPixels, int myThreadID)
     {
         using namespace parallelMandelbrotState;
 
-        float highestOfThem = (height > width) ? height : width;
+        precision highestOfThem = (height > width) ? height : width;
 
         int start_y = begin / width;
         int start_x = begin % width;
@@ -400,8 +403,8 @@ namespace mandelbrotCalculator::parallelMandelbrot
                 int index = (y * width + x) * 3;
 
                 complex c;
-                c.r = (float(x) / float(width)) * zoom * (float(width) / highestOfThem) - zoom * (float(width) / highestOfThem) / 2 + centralPoint.r;
-                c.i = (float(y) / float(height)) * zoom * (float(height) / highestOfThem) - zoom * (float(height) / highestOfThem) / 2 + centralPoint.i;
+                c.r = (precision(x) / precision(width)) * zoom * (precision(width) / highestOfThem) - zoom * (precision(width) / highestOfThem) / 2 + centralPoint.r;
+                c.i = (precision(y) / precision(height)) * zoom * (precision(height) / highestOfThem) - zoom * (precision(height) / highestOfThem) / 2 + centralPoint.i;
 
                 float iterations_number_took = smooth_iteration_count(c);
 
@@ -421,14 +424,13 @@ namespace mandelbrotCalculator::parallelMandelbrot
         }
     }
 
-    void computeParallel(std::vector<unsigned char> &textureData, float zoom, complex centralPoint, int width, int height)
+    void computeParallel(std::vector<unsigned char> &textureData, precision zoom, complex centralPoint, int width, int height)
     {
         using namespace parallelMandelbrotState;
 
         if (isComputing())
         {
             std::cout << "tried to start a computation while another was still running\n";
-            exit(-1);
         }
 
         if(!haveIalreadyJoined){
@@ -574,7 +576,7 @@ namespace inputHandler
             double x, y;
             getNormalizedCursorPositionInWindow(state::window, x, y);
 
-            float newZoom = state::zoom * std::pow(baseForZoomScrollFunction, float(yOffsetLastScroll));
+            precision newZoom = state::zoom * (precision)std::pow(baseForZoomScrollFunction, float(yOffsetLastScroll));
             state::centralPoint = numberCentralShouldBeToMakePointBeInNormalizedWindow(zoomPoint, newZoom, x, y);
             state::zoom = newZoom;
             std::vector<unsigned char> texture;
@@ -719,6 +721,8 @@ int main()
     while (!glfwWindowShouldClose(state::window))
     {
 
+        auto start_time = std::chrono::steady_clock::now();
+
         inputHandler::runEvents();
 
         if (mandelbrotCalculator::parallelMandelbrot::isTextureReady())
@@ -743,6 +747,14 @@ int main()
 
         // Poll for and process events
         glfwPollEvents();
+
+        auto end_time = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed_time = end_time - start_time;
+        std::chrono::milliseconds sleep_time = frame_duration - std::chrono::duration_cast<std::chrono::milliseconds>(elapsed_time);
+
+        if (sleep_time > std::chrono::milliseconds(0)) {
+            std::this_thread::sleep_for(sleep_time);
+        }
     }
 
     { // clean up
